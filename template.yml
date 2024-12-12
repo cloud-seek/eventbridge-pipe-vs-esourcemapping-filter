@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless pattern connecting SQS, EventBridge Pipes, and Lambda functions.
+
+Resources:
+  SenderLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: sender-lambda/
+      Handler: app.handler
+      Runtime: nodejs20.x
+      MemorySize: 128
+      Timeout: 10
+      Tracing: Active
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt QueueA.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt QueueB.QueueName
+        - AWSXRayDaemonWriteAccess
+      Environment:
+        Variables:
+          QUEUE_URL: !Ref QueueA
+
+  ReceiverLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: receiver-lambda/
+      Handler: app.handler
+      Runtime: nodejs20.x
+      MemorySize: 128
+      Timeout: 10
+      Tracing: Active
+      Policies:
+        - AWSXRayDaemonWriteAccess
+      Events:
+        QueueBEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt QueueB.Arn
+            BatchSize: 4
+
+  EnrichmentLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: enrichment-lambda/
+      Handler: app.handler
+      Runtime: nodejs20.x
+      MemorySize: 128
+      Timeout: 10
+      Tracing: Active
+      Policies:
+        - AWSXRayDaemonWriteAccess
+
+  QueueA:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 30
+
+  QueueB:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 30
+
+  EventBridgePipe:
+    Type: AWS::Pipes::Pipe
+    Properties:
+      Name: sqs-to-eventbridge-pipe
+      Description: Pipe to connect SQS Queue A to ReceiverLambda via EventBridge
+      RoleArn: !GetAtt PipeRole.Arn
+      Source: !GetAtt QueueA.Arn
+      LogConfiguration:
+        CloudwatchLogsLogDestination:
+          LogGroupArn: !GetAtt PipeLogGroup.Arn
+        Level: INFO
+      SourceParameters:
+        SqsQueueParameters:
+          BatchSize: 4
+        MaximumBatchingWindowInSeconds: 50
+      Target: !GetAtt ReceiverLambda.Arn
+      Enrichment: !GetAtt EnrichmentLambdaFunction.Arn
+      TargetParameters:
+        LambdaFunctionParameters:
+          InvocationType: 'FIRE_AND_FORGET'
+
+  PipeLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/pipes/${AWS::StackName}-PipeLogs"
+      RetentionInDays: 3
+
+  PipeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: pipes.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambdaEnrichment
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource: !GetAtt EnrichmentLambdaFunction.Arn
+        - PolicyName: PipePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt QueueA.Arn
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt ReceiverLambda.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/pipes/${AWS::StackName}-PipeLogs:*"
+
+Outputs:
+  SenderLambdaFunction:
+    Description: Sender Lambda Function ARN
+    Value: !GetAtt SenderLambda.Arn
+
+  ReceiverLambdaFunction:
+    Description: Receiver Lambda Function ARN
+    Value: !GetAtt ReceiverLambda.Arn
+
+  QueueAURL:
+    Description: URL of the SQS Queue A
+    Value: !Ref QueueA
+
+  QueueBURL:
+    Description: URL of the SQS Queue B
+    Value: !Ref QueueB
