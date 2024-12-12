@@ -2,11 +2,11 @@ import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 
 const sqs = new SQSClient({ region: process.env.AWS_REGION });
 
-export const handler = async () => {
-  const randomValue = 1;
+export const handler = async (event) => {
+  const randomValue = 4;
   const params = {
     QueueUrl: process.env.QUEUE_URL,
-    MessageBody: JSON.stringify({ a: randomValue }),
+    MessageBody: JSON.stringify({ a: event.randomValue }),
   };
 
   try {

@@ -39,6 +39,10 @@ Resources:
           Properties:
             Queue: !GetAtt QueueB.Arn
             BatchSize: 4
+            MaximumBatchingWindowInSeconds: 10
+            FilterCriteria: 
+              Filters: 
+                - Pattern: '{ "body": { "a": [ { "anything-but": [ 5 ] } ] }}'
 
   EnrichmentLambdaFunction:
     Type: AWS::Serverless::Function
@@ -55,12 +59,12 @@ Resources:
   QueueA:
     Type: AWS::SQS::Queue
     Properties:
-      VisibilityTimeout: 30
+      VisibilityTimeout: 60
 
   QueueB:
     Type: AWS::SQS::Queue
     Properties:
-      VisibilityTimeout: 30
+      VisibilityTimeout: 60
 
   EventBridgePipe:
     Type: AWS::Pipes::Pipe
@@ -76,7 +80,7 @@ Resources:
       SourceParameters:
         SqsQueueParameters:
           BatchSize: 4
-        MaximumBatchingWindowInSeconds: 50
+          MaximumBatchingWindowInSeconds: 10
       Target: !GetAtt ReceiverLambda.Arn
       Enrichment: !GetAtt EnrichmentLambdaFunction.Arn
       TargetParameters:

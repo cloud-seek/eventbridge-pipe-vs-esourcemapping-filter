@@ -1,8 +1,11 @@
 
-export const handler = async (event) => {
-    console.log('Raw event: ',event);
-    console.log('Event received:', JSON.stringify(event));
-  
-    return event;
-  };
-  
+export const handler = async (sqsEvent) => {
+  console.log('Event received:', JSON.stringify(sqsEvent));
+
+  const eventFilter = sqsEvent.filter( (evt) => JSON.parse(evt.body).a != 5)
+
+  if (eventFilter.length) {
+    console.log('Event passed filter:', eventFilter);
+  }
+  return event;
+};
