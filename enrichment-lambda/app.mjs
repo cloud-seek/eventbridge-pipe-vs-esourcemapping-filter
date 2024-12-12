@@ -7,5 +7,5 @@ export const handler = async (sqsEvent) => {
   if (eventFilter.length) {
     console.log('Event passed filter:', eventFilter);
   }
-  return event;
+  return eventFilter;
 };
