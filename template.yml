@@ -20,7 +20,8 @@ Resources:
         - AWSXRayDaemonWriteAccess
       Environment:
         Variables:
-          QUEUE_URL: !Ref QueueA
+          QUEUE_PIPE_URL: !Ref QueueA
+          QUEUE_EVENT_SOURCE_URL: !Ref QueueB
 
   ReceiverLambda:
     Type: AWS::Serverless::Function
